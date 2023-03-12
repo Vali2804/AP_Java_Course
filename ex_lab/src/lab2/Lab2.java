@@ -1,10 +1,8 @@
 package lab2;
 
-import lab1.lab1;
-
-public class lab2 {
+public class Lab2 {
     public static void main(String[] args) {
-        lab2 lab2 = new lab2();
+        Lab2 lab2 = new Lab2();
         //lab2.compulsory();
         lab2.homework();
     }

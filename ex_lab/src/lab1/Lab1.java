@@ -1,9 +1,9 @@
 package lab1;
 import java.util.Arrays;
 
-public class lab1 {
+public class Lab1 {
     public static void main(String[] args) {
-        lab1 lab1 = new lab1();
+        Lab1 lab1 = new Lab1();
         lab1.compulsory();
         lab1.homework(args);
     }
