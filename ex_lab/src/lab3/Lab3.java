@@ -14,7 +14,7 @@ public class Lab3 {
         Programmer p1 = new Programmer("Vali", "28.04.2002", "Java");
         Programmer p2 = new Programmer("Paul", "20.02.2001", "Python");
         Designer d1 = new Designer("Cata", "06.01.2003", "Photoshop");
-        Designer d2 = new Designer("Raluca","03.08.2000", "Illustrator");
+        Designer d2 = new Designer("Raluca", "03.08.2000", "Illustrator");
         Company c1 = new Company("Bit", "Anti-Malware");
         Company c2 = new Company("Abc", "Web-design");
         p1.addConnection("works for", c1);
