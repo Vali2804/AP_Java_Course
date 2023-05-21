@@ -3,186 +3,167 @@ package org.example;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.io.PrintWriter;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.util.ArrayList;
+import java.util.List;
 
 public class GameServer {
 
-    public static void main(String[] args) throws Exception {
-        try (ServerSocket listener = new ServerSocket(8100)) {
-            System.out.println("Connect 5 Game Server is Running");
-            System.out.println("Listening on IP Address: " + listener.getInetAddress());
-            System.out.println("Listening on Port: " + listener.getLocalSocketAddress());
-            System.out.println("Waiting for Connections...");
+    private final int port;
+    private List<ClientThread> clients;
+    private Game game;
+    private long currentTime = System.currentTimeMillis();
+
+    public GameServer(int port) {
+        this.port = port;
+        this.clients = new ArrayList<>();
+    }
+
+    public void start() {
+        try {
+            ServerSocket serverSocket = new ServerSocket(port);
+            System.out.println("Server started on port " + port);
 
             while (true) {
-                Game game = new Game();
-                Game.Player player1 = game.new Player(listener.accept(), "RED");
-                System.out.println("Player 1 has connected.");
-                Game.Player player2 = game.new Player(listener.accept(), "YELLOW");
-                System.out.println("Player 2 has connected.");
-                player1.setOpponent(player2);
-                player2.setOpponent(player1);
-                game.currentPlayer = player1;
-                player1.start();
-                player2.start();
+                Socket clientSocket = serverSocket.accept();
+
+                // Read the name and mark from the client
+                BufferedReader reader = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
+                String name = reader.readLine();
+                char mark = reader.readLine().charAt(0);
+
+                ClientThread clientThread = new ClientThread(clientSocket, this, name, mark);
+                clients.add(clientThread);
+                clientThread.start();
+
+                System.out.println("Client connected: " + clientSocket.getInetAddress() + " (Name: " + name + ", Mark: " + mark + ")");
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public void stop() {
+        // Cleanup resources, stop the server, etc.
+        System.out.println("Server stopped");
+        System.exit(0);
+    }
+
+    public ClientThread OtherPlayer(String name) {
+        for (ClientThread client : clients) {
+            if (client.getUsername() == name) {
+                return client;
+            }
+        }
+        return null;
+    }
+
+    public void setOtherPlayerTurn(String name) {
+        for (ClientThread client : clients) {
+            if (client.getUsername() == name) {
+                client.setTurn(true);
             }
         }
     }
-}
 
-class Game {
-    private Player[] board = new Player[15 * 15];
-    Player currentPlayer;
-
-    public boolean isWinner() {
-        // Check horizontal
-        for (int row = 0; row < 15; row++) {
-            for (int col = 0; col <= 10; col++) {
-                Player player = board[row * 15 + col];
-                if (player != null &&
-                        player == board[row * 15 + col + 1] &&
-                        player == board[row * 15 + col + 2] &&
-                        player == board[row * 15 + col + 3] &&
-                        player == board[row * 15 + col + 4]) {
-                    return true;
+    public void handleCommand(ClientThread client, String command) {
+        if (command.equals("stop")) {
+            stop();
+        } else if (command.startsWith("create")) {
+            if (game == null) {
+                String[] parts = command.split(" ");
+                if (parts.length >= 2) {
+                    int boardSize = Integer.parseInt(parts[1]);
+                    game = new Game(boardSize);
+                    String name = client.getUsername();
+                    char mark = client.getMark();
+                    game.addPlayer(name, mark);
+                    client.setTurn(true);
+                    String message = "Game created with board size " + boardSize;
+                    System.out.println(message);
+                    client.sendMessage(message);
+                    currentTime = System.currentTimeMillis();
+                } else {
+                    System.out.println("Invalid create command. Usage: create <boardSize>");
                 }
+            } else {
+                System.out.println("A game is already in progress");
             }
-        }
-
-        // Check vertical
-        for (int col = 0; col < 15; col++) {
-            for (int row = 0; row <= 10; row++) {
-                Player player = board[row * 15 + col];
-                if (player != null &&
-                        player == board[(row + 1) * 15 + col] &&
-                        player == board[(row + 2) * 15 + col] &&
-                        player == board[(row + 3) * 15 + col] &&
-                        player == board[(row + 4) * 15 + col]) {
-                    return true;
-                }
+        } else if (command.startsWith("join")) {
+            if (game != null) {
+                String[] parts = command.split(" ");
+                String name = client.getUsername();
+                char mark = client.getMark();
+                game.addPlayer(name, mark);
+                String message = "Player " + name + " joined the game.";
+                System.out.println(message);
+                client.sendMessage(message);
+            } else {
+                String message = "No game is currently in progress";
+                System.out.println(message);
+                client.sendMessage(message);
             }
-        }
-
-        // Check diagonal (top-left to bottom-right)
-        for (int row = 0; row <= 10; row++) {
-            for (int col = 0; col <= 10; col++) {
-                Player player = board[row * 15 + col];
-                if (player != null &&
-                        player == board[(row + 1) * 15 + col + 1] &&
-                        player == board[(row + 2) * 15 + col + 2] &&
-                        player == board[(row + 3) * 15 + col + 3] &&
-                        player == board[(row + 4) * 15 + col + 4]) {
-                    return true;
-                }
-            }
-        }
-
-        // Check diagonal (top-right to bottom-left)
-        for (int row = 0; row <= 10; row++) {
-            for (int col = 4; col < 15; col++) {
-                Player player = board[row * 15 + col];
-                if      (player != null &&
-                        player == board[(row + 1) * 15 + col - 1] &&
-                        player == board[(row + 2) * 15 + col - 2] &&
-                        player == board[(row + 3) * 15 + col - 3] &&
-                        player == board[(row + 4) * 15 + col - 4]) {
-                    return true;
-                }
-            }
-        }
-
-        return false;
-    }
-
-    public boolean boardFilledUp() {
-        for (int i = 0; i < board.length; i++) {
-            if (board[i] == null) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    public synchronized int moveCheck(int location, Player player) {
-        if (player == currentPlayer && board[location] == null) {
-            board[location] = currentPlayer;
-            currentPlayer = currentPlayer.opponent;
-            currentPlayer.opponentMoves(location);
-            return location;
-        }
-        return -1;
-    }
-
-    class Player extends Thread {
-        String mark;
-        Player opponent;
-        Socket socket;
-        BufferedReader input;
-        PrintWriter output;
-
-        public Player(Socket socket, String mark) {
-            this.socket = socket;
-            this.mark = mark;
-            try {
-                input = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-                output = new PrintWriter(socket.getOutputStream(), true);
-                output.println("WELCOME " + mark);
-                output.println("MESSAGE Waiting for your opponent to connect!");
-            } catch (IOException e) {
-                System.out.println("Player Left: " + e);
-            }
-        }
-
-        public void setOpponent(Player opponent) {
-            this.opponent = opponent;
-        }
-
-        public void opponentMoves(int location) {
-            output.println("OPPONENT_MOVED " + location);
-            output.println(isWinner() ? "DEFEAT" : boardFilledUp() ? "TIE" : "");
-        }
-
-        public void run() {
-            try {
-                output.println("MESSAGE All players connected");
-
-                if (mark.equals("RED")) {
-                    output.println("MESSAGE Your move");
-                }
-
-                while (true) {
-                    String command = input.readLine();
-                    if (command.startsWith("MOVE")) {
-                        int location = Integer.parseInt(command.substring(5));
-                        int validLocation = moveCheck(location, this);
-                        if (validLocation != -1) {
-                            output.println("VALID_MOVE " + validLocation);
-                            output.println(isWinner() ? "VICTORY" : boardFilledUp() ? "TIE" : "");
-                        } else {
-                            output.println("MESSAGE Wait your turn");
+        } else if (command.startsWith("submit")) {
+            if (game != null && client.isTurn() && game.isEnded() == 0) {
+                String[] parts = command.split(" ");
+                if (parts.length >= 4 && parts[0].equals("submit")) {
+                    int row = Integer.parseInt(parts[1]);
+                    int col = Integer.parseInt(parts[2]);
+                    char mark = client.getMark();
+                    boolean validMove = game.submitMove(game.playerByName(client.getUsername()), row, col, mark,currentTime);
+                    if (validMove) {
+                         if(game.isEnded()==1)
+                        {String message = "Player " + client.getUsername() + " won the game with the move at (" + row + ", " + col + ") " + client.getMark();
+                        System.out.println(message);
+                        client.sendMessage(message);
+                        String message2 = "Player " + game.otherPlyerName(client.getUsername()) + "lost.";
+                        System.out.println(message2);
+                        ClientThread otherClient = OtherPlayer(game.otherPlyerName(client.getUsername()));
+                        otherClient.sendMessage(message2);
                         }
-                    } else if (command.startsWith("QUIT")) {
-                        System.out.println("Player Exited. Game Over.");
-                        return;
+                         else{
+                        String message = "Player " + client.getUsername() + " submitted a move at (" + row + ", " + col + ") " + client.getMark();
+                        System.out.println(message);
+                        client.sendMessage(message);
+                        String message2 = message + ". Player " + game.otherPlyerName(client.getUsername()) + ", is your turn now.";
+                        System.out.println(message2);
+                        ClientThread otherClient = OtherPlayer(game.otherPlyerName(client.getUsername()));
+                        otherClient.sendMessage(message2);
+                        currentTime = System.currentTimeMillis();
+                        client.setTurn(false);
+                        setOtherPlayerTurn(game.otherPlyerName(client.getUsername()));}
+
+                    } else {
+                        String message = "Invalid move";
+                        client.sendMessage(message);
+                        System.out.println(message);
                     }
+                } else {
+                    String message = "Invalid submit command. Usage: submit <row> <col> <mark>";
+                    client.sendMessage(message);
+                    System.out.println(message);
                 }
-            } catch (IOException e) {
-                System.out.println("Player Left: " + e);
-            } finally {
-                if (opponent != null && opponent.output != null) {
-                    opponent.output.println("OTHER_PLAYER_LEFT");
-                }
-                try {
-                    socket.close();
-                    System.out.println("Server Side Connection Closed.");
-                } catch (IOException e) {
-                    System.out.println("Player Left: " + e);
-                    System.exit(1);
+            } else {
+                if (game == null) {
+                    String message = "No game is currently in progress";
+                    client.sendMessage(message);
+                    System.out.println(message);
+                } else if (game.isEnded() == 1) {
+                    String message = "Game was ended";
+                    client.sendMessage(message);
+                    System.out.println(message);
+                } else {
+                    String message = "Is not " + client.getUsername() + " turn.";
+                    client.sendMessage(message);
+                    System.out.println(message);
                 }
             }
+        } else {
+            String message = "Server received an unknown command: " + command;
+            client.sendMessage(message);
+            System.out.println(message);
         }
     }
-}
 
+}
